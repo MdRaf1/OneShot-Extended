@@ -73,7 +73,7 @@ def main() -> None:
         pages = tg.LinearLayout(activity, root)
 
         scan_screen = ScanScreen(activity, pages, DEFAULT_INTERFACE, settings, orchestrator)
-        queue_screen = QueueScreen(activity, pages, orchestrator)
+        queue_screen = QueueScreen(activity, pages, orchestrator, radio_lock=radio_lock)
         log_screen = LogScreen(activity, pages)
         pbc_screen = PbcScreen(
             activity, pages, DEFAULT_INTERFACE, settings, radio_lock,

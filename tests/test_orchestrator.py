@@ -430,6 +430,101 @@ def test_enqueue_is_idempotent_for_the_same_bssid(tmp_path):
     assert len(orch.get_queue_snapshot()) == 1
 
 
+# ---------------------------------------------------------------------------
+# Final-review fix: bruteforce phase sets state='running' while in progress
+# (otherwise the GUI's progress display can never render, since
+# presenters.format_queue_row gates it on state == 'running')
+# ---------------------------------------------------------------------------
+
+class StateRecordingBruteforce:
+    def __init__(self, session, bssid, calls_before_crack=3):
+        self.session = session
+        self.bssid = bssid
+        self.calls_before_crack = calls_before_crack
+        self.calls = 0
+        self.seen_states = []
+        self.CONNECTION = SimpleNamespace(CONNECTION_STATUS=SimpleNamespace(WPA_PSK='secretpsk'))
+
+    def bruteforceStep(self, bssid, mask):  # pylint: disable=unused-argument
+        self.calls += 1
+        self.seen_states.append(self.session.get_target(bssid).state)
+        if self.calls >= self.calls_before_crack:
+            return ('cracked', '12345670')
+        return ('advanced', None)
+
+
+def test_bruteforce_phase_sets_state_running_while_in_progress(tmp_path):
+    session = _make_session(tmp_path)
+    fake_conn = ScriptedConnectionFactory(script={"AA:AA:AA:AA:AA:AA": "always_fail"})
+    bf = StateRecordingBruteforce(session, "AA:AA:AA:AA:AA:AA")
+    orch = Orchestrator(
+        "wlan0", Settings(interface="wlan0"), session=session,
+        connection_factory=fake_conn, bruteforce_factory=lambda interface, settings, session=None: bf,
+        generator_factory=lambda: FakeGenerator(getAllLikely_returns=[]),
+    )
+    orch.enqueue("AA:AA:AA:AA:AA:AA")
+    orch.run()
+
+    assert bf.seen_states == ["running", "running", "running"]
+    assert session.get_target("AA:AA:AA:AA:AA:AA").state == "cracked"
+
+
+# ---------------------------------------------------------------------------
+# Final-review fix: a transient WPS_FAIL during bruteforce ('retry') must
+# retry the same mask value, not advance past it
+# ---------------------------------------------------------------------------
+
+class RetryThenCrackBruteforce:
+    def __init__(self):
+        self.calls = 0
+        self.masks_seen = []
+        self.CONNECTION = SimpleNamespace(CONNECTION_STATUS=SimpleNamespace(WPA_PSK='secretpsk'))
+
+    def bruteforceStep(self, bssid, mask):  # pylint: disable=unused-argument
+        self.calls += 1
+        self.masks_seen.append(mask)
+        if self.calls < 3:
+            return ('retry', None)
+        return ('cracked', '12345670')
+
+
+def test_retry_state_reattempts_same_mask_without_advancing(tmp_path):
+    fake_conn = ScriptedConnectionFactory(script={"AA:AA:AA:AA:AA:AA": "always_fail"})
+    bf = RetryThenCrackBruteforce()
+    orch = Orchestrator(
+        "wlan0", Settings(interface="wlan0"), session=_make_session(tmp_path),
+        connection_factory=fake_conn, bruteforce_factory=lambda interface, settings, session=None: bf,
+        generator_factory=lambda: FakeGenerator(getAllLikely_returns=[]),
+    )
+    orch.enqueue("AA:AA:AA:AA:AA:AA")
+    orch.run()
+
+    assert bf.masks_seen == ["0000", "0000", "0000"]  # never advanced past the retried value
+    assert orch.session.get_target("AA:AA:AA:AA:AA:AA").state == "cracked"
+
+
+# ---------------------------------------------------------------------------
+# Final-review fix: stop() must not permanently latch the Orchestrator —
+# a later run() call must do real work again, not return immediately
+# ---------------------------------------------------------------------------
+
+def test_stop_then_run_again_resumes_instead_of_returning_immediately(tmp_path):
+    fake = ScriptedConnectionFactory(script={"AA:AA:AA:AA:AA:AA": "always_fail"})
+    orch = Orchestrator(
+        "wlan0", Settings(interface="wlan0"), session=_make_session(tmp_path),
+        connection_factory=fake, bruteforce_factory=NoOpBruteforceFactory(),
+        generator_factory=lambda: FakeGenerator(getAllLikely_returns=[]),
+    )
+    orch.enqueue("AA:AA:AA:AA:AA:AA")
+    orch.stop()  # simulate a prior Stop click before this run() call
+    orch.run()
+
+    assert fake.call_order == [
+        "AA:AA:AA:AA:AA:AA:null_pin",
+        "AA:AA:AA:AA:AA:AA:pixie_dust",
+    ]
+
+
 def test_run_with_empty_queue_does_nothing(tmp_path):
     orch = Orchestrator(
         "wlan0", Settings(interface="wlan0"), session=_make_session(tmp_path),

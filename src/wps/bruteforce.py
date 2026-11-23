@@ -191,6 +191,11 @@ class Initialize:
           - 'cracked' (7-digit mask only): result is the full 8-digit PIN.
           - 'exhausted': mask was already at the end of its range.
             result is None.
+          - 'retry': the WPS transaction itself failed (not a wrong-PIN
+            signal) — the caller should retry this exact same mask value,
+            not advance past it, matching _firstHalfBruteforce/
+            _secondHalfBruteforce's own same-pin retry on this status.
+            result is None.
         """
 
         checksum = self.GENERATOR.checksum
@@ -203,6 +208,9 @@ class Initialize:
 
             if result == 'locked':
                 return 'locked', None
+
+            if result == 'wps_fail':
+                return 'retry', None
 
             if self.CONNECTION.CONNECTION_STATUS.isFirstHalfValid():
                 return 'first_half_found', None
@@ -219,6 +227,9 @@ class Initialize:
 
         if result == 'locked':
             return 'locked', None
+
+        if result == 'wps_fail':
+            return 'retry', None
 
         if self.CONNECTION.CONNECTION_STATUS.LAST_M_MESSAGE > 6:
             return 'cracked', pin

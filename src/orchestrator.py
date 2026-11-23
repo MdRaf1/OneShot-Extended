@@ -130,6 +130,11 @@ class Orchestrator:
         return stop_flag is not None and stop_flag.is_set()
 
     def run(self, stop_flag: threading.Event = None) -> None:
+        # A prior stop() call must not permanently latch this Orchestrator:
+        # each fresh run() is a new attempt, not a resumption of a
+        # previous stop request.
+        self._internal_stop.clear()
+
         if not self._order:
             return
 
@@ -247,6 +252,7 @@ class Orchestrator:
             return
 
         mask = self.session.get_bruteforce_mask(bssid) or '0000'
+        self.session.set_state(bssid, 'running')
 
         while True:
             if self._should_stop(stop_flag):
@@ -258,6 +264,11 @@ class Orchestrator:
                 self._emit('fatal_error', 'error', str(e), bssid=bssid)
                 self.session.mark_failed(bssid)
                 return
+
+            if state == 'retry':
+                # A transient WPS_FAIL, not a wrong-pin signal: retry this
+                # exact mask value, don't advance past it.
+                continue
 
             if state == 'cracked':
                 wpa_psk = bf.CONNECTION.CONNECTION_STATUS.WPA_PSK

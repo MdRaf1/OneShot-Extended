@@ -34,6 +34,8 @@ class FakeConnection:
             self.CONNECTION_STATUS.IS_LOCKED = True
         elif self.returns == "WPS_FAIL_OTHER":
             pass  # a generic non-matching failure: status stays '' (unset)
+        elif self.returns == "WPS_FAIL":
+            self.CONNECTION_STATUS.STATUS = 'WPS_FAIL'
         elif self.returns == "VALID_FIRST_HALF":
             self.CONNECTION_STATUS.LAST_M_MESSAGE = 6  # isFirstHalfValid() => LAST_M_MESSAGE > 5
         elif self.returns == "GOT_PSK":
@@ -93,6 +95,23 @@ def test_bruteforce_step_advances_on_plain_failure_second_half(tmp_path, monkeyp
     bf = _make_bruteforce_initialize_with_fakes(monkeypatch, tmp_path, FakeConnection(returns="WPS_FAIL_OTHER"))
     state, result = bf.bruteforceStep("AA:BB:CC:DD:EE:FF", "0000001")
     assert state == "advanced" and result is None
+
+
+def test_bruteforce_step_requests_retry_on_real_wps_fail_first_half(tmp_path, monkeypatch):
+    # A genuine WPS_FAIL (transaction glitch, not a wrong-pin signal) must
+    # not advance past this mask value — unlike plain/other failures,
+    # the CLI's own _firstHalfBruteforce retries the same pin on this
+    # exact status (bruteforce.py's _attemptPin docstring), and the
+    # orchestrator must get a distinct signal to do the same.
+    bf = _make_bruteforce_initialize_with_fakes(monkeypatch, tmp_path, FakeConnection(returns="WPS_FAIL"))
+    state, result = bf.bruteforceStep("AA:BB:CC:DD:EE:FF", "0000")
+    assert state == "retry" and result is None
+
+
+def test_bruteforce_step_requests_retry_on_real_wps_fail_second_half(tmp_path, monkeypatch):
+    bf = _make_bruteforce_initialize_with_fakes(monkeypatch, tmp_path, FakeConnection(returns="WPS_FAIL"))
+    state, result = bf.bruteforceStep("AA:BB:CC:DD:EE:FF", "0000001")
+    assert state == "retry" and result is None
 
 
 def test_bruteforce_step_does_not_sleep_or_loop(tmp_path, monkeypatch):
