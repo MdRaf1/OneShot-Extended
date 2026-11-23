@@ -21,9 +21,7 @@ from src import logger
 import src.wps.generator
 import src.wps.connection
 import src.utils
-import src.args
-
-args = src.args.parseArgs()
+from src.settings import Settings
 
 class BruteforceStatus:
     """Stores bruteforce details and status."""
@@ -73,12 +71,13 @@ class BruteforceStatus:
 class Initialize:
     """Handles bruteforce"""
 
-    def __init__(self, interface: str):
+    def __init__(self, interface: str, settings: Settings = None):
+        self.settings = settings if settings is not None else Settings(interface=interface)
         self.BRUTEFORCE_STATUS = BruteforceStatus()
         self.CONNECTION_STATUS = src.wps.connection.ConnectionStatus()
         self.GENERATOR  = src.wps.generator.WPSpin()
         self.CONNECTION = src.wps.connection.Initialize(
-            interface
+            interface, self.settings
         )
 
     def _firstHalfBruteforce(self, bssid: str, first_half: str) -> str | bool:
@@ -97,8 +96,8 @@ class Initialize:
             self.CONNECTION.singleConnection(bssid, pin)
 
             if self.CONNECTION.CONNECTION_STATUS.IS_LOCKED:
-                logger.warning(f'{bssid} is WPS LOCKED. Retrying PIN {pin} in {args.timeout}s…')
-                time.sleep(args.timeout)
+                logger.warning(f'{bssid} is WPS LOCKED. Retrying PIN {pin} in {self.settings.timeout}s…')
+                time.sleep(self.settings.timeout)
                 continue
 
             if self.CONNECTION.CONNECTION_STATUS.isFirstHalfValid():
@@ -112,8 +111,8 @@ class Initialize:
             first_half = str(int(first_half) + 1).zfill(4)
             self.BRUTEFORCE_STATUS.registerAttempt(first_half)
 
-            if args.delay:
-                time.sleep(args.delay)
+            if self.settings.delay:
+                time.sleep(self.settings.delay)
 
         logger.warning('First half not found')
         return False
@@ -134,8 +133,8 @@ class Initialize:
             self.CONNECTION.singleConnection(bssid, pin)
 
             if self.CONNECTION.CONNECTION_STATUS.IS_LOCKED:
-                logger.warning(f'{bssid} is WPS LOCKED. Retrying PIN {pin} in {args.timeout}s…')
-                time.sleep(args.timeout)
+                logger.warning(f'{bssid} is WPS LOCKED. Retrying PIN {pin} in {self.settings.timeout}s…')
+                time.sleep(self.settings.timeout)
                 continue
 
             if self.CONNECTION.CONNECTION_STATUS.LAST_M_MESSAGE > 6:
@@ -148,8 +147,8 @@ class Initialize:
             second_half = str(int(second_half) + 1).zfill(3)
             self.BRUTEFORCE_STATUS.registerAttempt(first_half + second_half)
 
-            if args.delay:
-                time.sleep(args.delay)
+            if self.settings.delay:
+                time.sleep(self.settings.delay)
 
         return False
 
@@ -191,5 +190,5 @@ class Initialize:
                 file.write(self.BRUTEFORCE_STATUS.MASK)
             logger.info(f'Session saved in {filename}')
 
-            if args.loop:
+            if self.settings.loop:
                 raise KeyboardInterrupt from e

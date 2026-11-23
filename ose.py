@@ -28,7 +28,7 @@ import src.wps.connection
 import src.wps.bruteforce
 import src.utils
 import src.setup
-import src.args
+import src.settings
 from src.errors import FatalError
 
 def setupAndroidWifi(android_network: src.wifi.android.AndroidNetwork, enable: bool = False):
@@ -41,57 +41,57 @@ def setupAndroidWifi(android_network: src.wifi.android.AndroidNetwork, enable: b
         android_network.disableWifi()
 
 
-def scanForNetworks(interface: str, vuln_list: list[str]) -> tuple[str, dict] | None:
+def scanForNetworks(interface: str, vuln_list: list[str], settings: src.settings.Settings) -> tuple[str, dict] | None:
     """Scan, and prompt user to select network"""
 
-    scanner = src.wifi.scanner.WiFiScanner(interface, vuln_list)
+    scanner = src.wifi.scanner.WiFiScanner(interface, vuln_list, settings)
     return scanner.promptNetwork()
 
-def handleConnection(args):
+def handleConnection(settings: src.settings.Settings):
     """Main connection logic"""
 
     network_info = {}
     success = False
 
-    if args.bruteforce:
-        connection = src.wps.bruteforce.Initialize(args.interface)
+    if settings.bruteforce:
+        connection = src.wps.bruteforce.Initialize(settings.interface, settings)
     else:
-        connection = src.wps.connection.Initialize(args.interface)
+        connection = src.wps.connection.Initialize(settings.interface, settings)
 
-    if args.pbc:
+    if settings.pbc:
         connection.singleConnection(pbc_mode=True)
     else:
-        if not args.bssid:
+        if not settings.bssid:
             try:
-                with open(args.vuln_list, 'r', encoding='utf-8') as file:
+                with open(settings.vuln_list, 'r', encoding='utf-8') as file:
                     vuln_list = file.read().splitlines()
             except FileNotFoundError:
                 vuln_list = []
 
-            if not args.loop:
+            if not settings.loop:
                 logger.info('BSSID not specified (--bssid) — scanning for available networks')
 
-            result = scanForNetworks(args.interface, vuln_list)
+            result = scanForNetworks(settings.interface, vuln_list, settings)
             if result is None:
                 return
 
-            args.bssid, network_info = result
+            settings.bssid, network_info = result
 
-        if args.bssid:
-            if args.bruteforce:
+        if settings.bssid:
+            if settings.bruteforce:
                 connection.smartBruteforce(
-                    args.bssid,
-                    args.pin
+                    settings.bssid,
+                    settings.pin
                 )
             else:
                 success = connection.singleConnection(
-                    args.bssid,
-                    args.pin
+                    settings.bssid,
+                    settings.pin
                 )
 
             # Save to vulnerable list
-            if success and args.pixie_dust and network_info:
-                src.utils.addVulnerableAP(network_info, args.vuln_list)
+            if success and settings.pixie_dust and network_info:
+                src.utils.addVulnerableAP(network_info, settings.vuln_list)
 
 def _run():
     """Main os-e code"""
@@ -99,59 +99,59 @@ def _run():
     src.setup.checkRequirements()
     src.setup.setupDirectories()
 
-    args = src.args.parseArgs()
+    settings = src.settings.Settings.from_cli()
     logger.initializeLogging()
 
-    src.utils.checkRunningProcesses(args.interface)
+    src.utils.checkRunningProcesses(settings.interface)
 
-    if args.kill:
+    if settings.kill:
         src.utils.killInterfering()
 
     while True:
         try:
             android_network = src.wifi.android.AndroidNetwork()
 
-            if args.clear:
+            if settings.clear:
                 src.utils.clearScreen()
 
-            if src.utils.isAndroid() is True and not args.dont_touch_settings and not args.mtk_wifi:
+            if src.utils.isAndroid() is True and not settings.dont_touch_settings and not settings.mtk_wifi:
                 setupAndroidWifi(android_network)
 
-            if args.mtk_wifi:
+            if settings.mtk_wifi:
                 wmt_wifi_device = Path('/dev/wmtWifi')
                 src.setup.setupMediatekWifi(wmt_wifi_device)
 
-            if src.utils.ifaceCtl(args.interface, action='up'):
-                src.utils.die(f'Unable to up interface \'{args.interface}\'')
+            if src.utils.ifaceCtl(settings.interface, action='up'):
+                src.utils.die(f'Unable to up interface \'{settings.interface}\'')
 
-            handleConnection(args)
+            handleConnection(settings)
 
-            if not args.loop:
+            if not settings.loop:
                 break
 
-            args.bssid = None
+            settings.bssid = None
 
         except KeyboardInterrupt:
-            if args.loop:
+            if settings.loop:
                 if input('\n[?] Exit the script (otherwise continue to AP scan)? [N/y] ').lower() == 'y':
                     logger.info('Aborting…')
                     break
-                args.bssid = None
+                settings.bssid = None
             else:
                 logger.info('Aborting…')
                 break
 
         finally:
-            if src.utils.isAndroid() is True and not args.dont_touch_settings and not args.mtk_wifi:
+            if src.utils.isAndroid() is True and not settings.dont_touch_settings and not settings.mtk_wifi:
                 setupAndroidWifi(android_network, enable=True)
 
-            if args.iface_down:
-                src.utils.ifaceCtl(args.interface, action='down')
+            if settings.iface_down:
+                src.utils.ifaceCtl(settings.interface, action='down')
 
-            if args.mtk_wifi:
+            if settings.mtk_wifi:
                 wmt_wifi_device.write_text('0', encoding='utf-8')
 
-            if args.restore:
+            if settings.restore:
                 src.utils.restoreProcesses()
 
 def main():
