@@ -26,6 +26,7 @@ import src.wifi.collector
 
 from src import logger
 from src.settings import Settings
+from src.prompts import Prompter, CLIPrompter
 
 class ConnectionStatus:
     """Stores WPS connection details and status."""
@@ -49,9 +50,10 @@ class ConnectionStatus:
 class Initialize:
     """WPS connection"""
 
-    def __init__(self, interface: str, settings: Settings = None):
+    def __init__(self, interface: str, settings: Settings = None, prompter: Prompter = None):
         self.INTERFACE = interface
         self.SETTINGS = settings if settings is not None else Settings(interface=interface)
+        self.PROMPTER = prompter if prompter is not None else CLIPrompter()
 
         self.CONNECTION_STATUS = ConnectionStatus()
         self.PIXIE_CREDS  = src.wps.pixiewps.Data()
@@ -104,7 +106,7 @@ class Initialize:
         """
 
         pixiewps_dir = src.utils.PIXIEWPS_DIR
-        generator    = src.wps.generator.WPSpin()
+        generator    = src.wps.generator.WPSpin(prompter=self.PROMPTER)
         collector    = src.wifi.collector.WiFiCollector()
 
         # Handle null pin attack
@@ -117,7 +119,7 @@ class Initialize:
 
                     with open(filename, 'r', encoding='utf-8') as file:
                         t_pin = file.readline().strip()
-                        if input(f'[?] Use previously calculated PIN {t_pin}? [n/Y] ').lower() != 'n':
+                        if self.PROMPTER.confirm(f'[?] Use previously calculated PIN {t_pin}? [n/Y] '):
                             pin = t_pin
                         else:
                             raise FileNotFoundError
@@ -227,7 +229,7 @@ class Initialize:
         line = line.rstrip('\n')
 
         if self.SETTINGS.verbose:
-            print(line)
+            logger.raw(line)
 
         # Handle WPS protocol messages
         if line.startswith('WPS: '):

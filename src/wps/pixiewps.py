@@ -52,7 +52,7 @@ class Data:
             logger.error(f'Pixiewps has exited on error: \n {error}')
             return False
 
-        print(command_output.stdout)
+        logger.raw(command_output.stdout)
 
         if command_output.returncode == 0:
             lines = command_output.stdout.splitlines()
