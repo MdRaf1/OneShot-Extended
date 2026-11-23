@@ -39,8 +39,8 @@ class AndroidNetwork:
 
             if is_scanning_on == '1':
                 self.ENABLED_SCANNING = 1
-        except subprocess.CalledProcessError:
-            logger.info('[-] Failed to get initial Wi-Fi scanning state, assuming it\'s enabled')
+        except (subprocess.CalledProcessError, FileNotFoundError) as error:
+            logger.warning(f'[-] Failed to get initial Wi-Fi scanning state, assuming it\'s enabled: {error}')
             self.ENABLED_SCANNING = 1
 
     def disableWifi(self, force_disable: bool = False, whisper: bool = False):
@@ -54,16 +54,16 @@ class AndroidNetwork:
 
         # Disable Android Wi-Fi scanner
         try:
-            subprocess.run(wifi_disable_scanner_cmd)
-        except subprocess.CalledProcessError:
-            logger.info('[-] Failed to disable Wi-Fi scanner, skipping')
+            subprocess.run(wifi_disable_scanner_cmd, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError) as error:
+            logger.warning(f'[-] Failed to disable Wi-Fi scanner, skipping: {error}')
 
         # Always scanning for networks causes the interface to be occupied by android
         if self.ENABLED_SCANNING == 1 or force_disable is True:
             try:
-                subprocess.run(wifi_disable_always_scanning_cmd)
-            except subprocess.CalledProcessError:
-                logger.info('[-] Failed to disable always-on Wi-Fi scanning, skipping')
+                subprocess.run(wifi_disable_always_scanning_cmd, check=True)
+            except (subprocess.CalledProcessError, FileNotFoundError) as error:
+                logger.warning(f'[-] Failed to disable always-on Wi-Fi scanning, skipping: {error}')
 
         time.sleep(3)
 
@@ -78,12 +78,12 @@ class AndroidNetwork:
 
         # Enable Android Wi-Fi scanner
         try:
-            subprocess.run(wifi_enable_scanner_cmd)
-        except subprocess.CalledProcessError:
-            logger.info('[!] Failed to enable Wi-Fi scanner, skipping')
+            subprocess.run(wifi_enable_scanner_cmd, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError) as error:
+            logger.warning(f'[!] Failed to enable Wi-Fi scanner, skipping: {error}')
 
         if self.ENABLED_SCANNING == 1 or force_enable is True:
             try:
-                subprocess.run(wifi_enable_always_scanning_cmd)
-            except subprocess.CalledProcessError:
-                logger.info('[-] Failed to enable always-on Wi-Fi scanning, skipping')
+                subprocess.run(wifi_enable_always_scanning_cmd, check=True)
+            except (subprocess.CalledProcessError, FileNotFoundError) as error:
+                logger.warning(f'[-] Failed to enable always-on Wi-Fi scanning, skipping: {error}')
