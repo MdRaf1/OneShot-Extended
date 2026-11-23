@@ -30,6 +30,7 @@ import src.utils
 import src.setup
 import src.settings
 from src.errors import FatalError
+from src.prompts import Prompter, CLIPrompter
 
 def setupAndroidWifi(android_network: src.wifi.android.AndroidNetwork, enable: bool = False):
     """Configure Android-specific WiFi settings"""
@@ -41,22 +42,23 @@ def setupAndroidWifi(android_network: src.wifi.android.AndroidNetwork, enable: b
         android_network.disableWifi()
 
 
-def scanForNetworks(interface: str, vuln_list: list[str], settings: src.settings.Settings) -> tuple[str, dict] | None:
+def scanForNetworks(interface: str, vuln_list: list[str], settings: src.settings.Settings,
+                     prompter: Prompter) -> tuple[str, dict] | None:
     """Scan, and prompt user to select network"""
 
-    scanner = src.wifi.scanner.WiFiScanner(interface, vuln_list, settings)
+    scanner = src.wifi.scanner.WiFiScanner(interface, vuln_list, settings, prompter)
     return scanner.promptNetwork()
 
-def handleConnection(settings: src.settings.Settings):
+def handleConnection(settings: src.settings.Settings, prompter: Prompter):
     """Main connection logic"""
 
     network_info = {}
     success = False
 
     if settings.bruteforce:
-        connection = src.wps.bruteforce.Initialize(settings.interface, settings)
+        connection = src.wps.bruteforce.Initialize(settings.interface, settings, prompter)
     else:
-        connection = src.wps.connection.Initialize(settings.interface, settings)
+        connection = src.wps.connection.Initialize(settings.interface, settings, prompter)
 
     if settings.pbc:
         connection.singleConnection(pbc_mode=True)
@@ -71,7 +73,7 @@ def handleConnection(settings: src.settings.Settings):
             if not settings.loop:
                 logger.info('BSSID not specified (--bssid) — scanning for available networks')
 
-            result = scanForNetworks(settings.interface, vuln_list, settings)
+            result = scanForNetworks(settings.interface, vuln_list, settings, prompter)
             if result is None:
                 return
 
@@ -93,6 +95,15 @@ def handleConnection(settings: src.settings.Settings):
             if success and settings.pixie_dust and network_info:
                 src.utils.addVulnerableAP(network_info, settings.vuln_list)
 
+def shouldExitLoop(prompter: Prompter) -> bool:
+    """Asks whether to exit the script on Ctrl-C during --loop, or keep
+    continuing to the next AP scan. Extracted as its own function so it's
+    directly testable without driving the whole _run() loop."""
+
+    return prompter.confirm_explicit_yes(
+        '\n[?] Exit the script (otherwise continue to AP scan)? [N/y] '
+    )
+
 def _run():
     """Main os-e code"""
 
@@ -100,6 +111,7 @@ def _run():
     src.setup.setupDirectories()
 
     settings = src.settings.Settings.from_cli()
+    prompter = CLIPrompter()
     logger.initializeLogging()
 
     src.utils.checkRunningProcesses(settings.interface)
@@ -124,7 +136,7 @@ def _run():
             if src.utils.ifaceCtl(settings.interface, action='up'):
                 src.utils.die(f'Unable to up interface \'{settings.interface}\'')
 
-            handleConnection(settings)
+            handleConnection(settings, prompter)
 
             if not settings.loop:
                 break
@@ -133,7 +145,7 @@ def _run():
 
         except KeyboardInterrupt:
             if settings.loop:
-                if input('\n[?] Exit the script (otherwise continue to AP scan)? [N/y] ').lower() == 'y':
+                if shouldExitLoop(prompter):
                     logger.info('Aborting…')
                     break
                 settings.bssid = None
