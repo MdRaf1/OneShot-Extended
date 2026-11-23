@@ -92,6 +92,46 @@ curl -sL https://gist.githubusercontent.com/chkndrp/f2ea65c77e3861ac4b586d9001ca
  sudo python ose.py -i wlan0 -B
  ```
 
+## GUI (Termux:GUI)
+OneShot-Extended also has a native Android GUI, built on
+[Termux:GUI](https://github.com/termux/termux-gui), that scans for WPS
+networks, lets you queue up several of them, and runs an unattended
+auto-chain attack (Null PIN → Pixie Dust → vendor-likely default PINs →
+full bruteforce, stopping at the first success) across the whole queue,
+with a live log and a separate manual PBC screen. It needs the same root
+and binaries as the CLI tool — this is an additional front end, not a
+replacement for Termux.
+
+#### Setup:
+```shell
+pkg install -y termux-gui
+pip install termuxgui
+```
+Then install the **Termux:GUI** plugin app itself from
+[F-Droid](https://f-droid.org/packages/com.termux.gui/) or
+[GitHub releases](https://github.com/termux/termux-gui/releases), and open
+it at least once so it's running alongside Termux.
+
+#### Launch:
+```shell
+sudo python ose_gui.py
+```
+
+#### Known limitations / required on-device follow-up
+This GUI layer was built and unit-tested without a Termux:GUI plugin or an
+Android device available — its automated test only proves the modules'
+*import structure* is sound, never their behavior against a real plugin.
+The following still need verifying on a real rooted device with a
+WPS-capable AP and the Termux:GUI plugin installed:
+- Real Termux:GUI rendering, event delivery, dialogs, and notifications.
+- The Scan screen against a live `iw` scan.
+- The Queue screen driving a real `Orchestrator.run()` against live
+  `wpa_supplicant`/`pixiewps`.
+- The PBC screen against a real router button press.
+- Backgrounding/battery behavior during a long queue run.
+- A `kill -9` mid-bruteforce crash-safety check against the real
+  `SessionStore` file.
+
 ## Usage
 ```
 Required arguments:
