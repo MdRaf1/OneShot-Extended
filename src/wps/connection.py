@@ -101,7 +101,8 @@ class Initialize:
         logger.success(f'WPA PSK: \'{wpa_psk}\'')
         logger.success(f'AP SSID: \'{essid}\'')
 
-    def singleConnection(self, bssid: str = None, pin: str = None, pbc_mode: bool = False, store_pin_on_fail: bool = False) -> bool:
+    def singleConnection(self, bssid: str = None, pin: str = None, pbc_mode: bool = False,
+                          store_pin_on_fail: bool = False, retry_on_lock: bool = True) -> bool:
         """        
         Establish a WPS connection, using a pin, a calculated pin (if in pixiemode), a PIN
         generated from a list of likely PINs, PBC mode, or null pin. handles pixiedust
@@ -129,19 +130,19 @@ class Initialize:
                 pin = generator.promptPin(bssid) or '12345670'
 
         if pbc_mode:
-            self._wpsConnection(bssid, pbc_mode=pbc_mode)
+            self._wpsConnection(bssid, pbc_mode=pbc_mode, retry_on_lock=retry_on_lock)
             bssid = self.CONNECTION_STATUS.BSSID
             pin = '<PBC mode>'
         elif store_pin_on_fail:
             try:
-                self._wpsConnection(bssid, pin, retry_on_lock=True)
+                self._wpsConnection(bssid, pin, retry_on_lock=retry_on_lock)
             except KeyboardInterrupt:
                 logger.info('Aborting…')
                 self.session.upsert_target(bssid)
                 self.session.update_pixie_pin(bssid, pin)
                 return False
         else:
-            self._wpsConnection(bssid, pin, retry_on_lock=True)
+            self._wpsConnection(bssid, pin, retry_on_lock=retry_on_lock)
 
         if self.CONNECTION_STATUS.STATUS == 'GOT_PSK':
             self._credentialPrint(pin, self.CONNECTION_STATUS.WPA_PSK, self.CONNECTION_STATUS.ESSID)
@@ -154,7 +155,8 @@ class Initialize:
             if self.PIXIE_CREDS.getAll():
                 pin = self.PIXIE_CREDS.runPixieWps(self.SETTINGS.show_pixie, self.SETTINGS.pixie_force)
                 if pin:
-                    return self.singleConnection(bssid, pin, store_pin_on_fail=True)
+                    return self.singleConnection(bssid, pin, store_pin_on_fail=True,
+                                                  retry_on_lock=retry_on_lock)
                 return False
 
             logger.error('Not enough data to run Pixie Dust attack')
