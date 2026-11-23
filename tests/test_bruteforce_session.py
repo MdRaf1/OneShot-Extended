@@ -97,3 +97,14 @@ def test_default_session_is_constructed_when_none_given(monkeypatch, tmp_path):
     monkeypatch.setattr("src.utils.SESSIONS_DIR", str(tmp_path) + "/")
     bf = _make_bruteforce_initialize_with_fakes(monkeypatch)
     assert bf.session is not None
+
+
+def test_explicit_session_is_forwarded_to_internal_connection(tmp_path, monkeypatch):
+    # Regression: bruteforce.Initialize's internal connection.Initialize
+    # must share the SAME session the caller explicitly provided, not
+    # silently default-construct its own (which would point at the real
+    # ~/.OneShot-Extended/sessions/ path even when the caller passed an
+    # explicit, sandboxed SessionStore).
+    store = SessionStore(tmp_path / "s.sqlite3")
+    bf = _make_bruteforce_initialize_with_fakes(monkeypatch, session=store)
+    assert bf.CONNECTION.session is store

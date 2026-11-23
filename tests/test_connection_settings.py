@@ -4,6 +4,7 @@ import time
 from unittest.mock import MagicMock
 
 import src.wps.connection
+from src.session import SessionStore
 from src.settings import Settings
 from src.wps.connection import Initialize
 
@@ -13,16 +14,19 @@ def test_importing_connection_does_not_parse_sys_argv(monkeypatch):
     importlib.reload(src.wps.connection)  # must not raise SystemExit
 
 
-def _make_initialize_without_real_subprocess(monkeypatch, settings=None):
+def _make_initialize_without_real_subprocess(monkeypatch, tmp_path, settings=None):
     monkeypatch.setattr(Initialize, "_initWpaSupplicant", lambda self: None)
-    conn = Initialize("wlan0", settings=settings)
+    # Always pass an explicit, tmp_path-scoped SessionStore so this test
+    # never touches the real default ~/.OneShot-Extended/sessions/ path.
+    session = SessionStore(tmp_path / "s.sqlite3")
+    conn = Initialize("wlan0", settings=settings, session=session)
     conn.WPAS = MagicMock()
     return conn
 
 
-def test_lock_retry_sleeps_for_settings_timeout(monkeypatch):
+def test_lock_retry_sleeps_for_settings_timeout(tmp_path, monkeypatch):
     settings = Settings(interface="wlan0", timeout=5)
-    conn = _make_initialize_without_real_subprocess(monkeypatch, settings=settings)
+    conn = _make_initialize_without_real_subprocess(monkeypatch, tmp_path, settings=settings)
 
     sleep_calls = []
     monkeypatch.setattr(time, "sleep", lambda s: sleep_calls.append(s))

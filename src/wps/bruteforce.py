@@ -82,7 +82,7 @@ class Initialize:
         self.CONNECTION_STATUS = src.wps.connection.ConnectionStatus()
         self.GENERATOR  = src.wps.generator.WPSpin()
         self.CONNECTION = src.wps.connection.Initialize(
-            interface, self.settings, self.prompter
+            interface, self.settings, self.prompter, self.session
         )
 
     def _firstHalfBruteforce(self, bssid: str, first_half: str) -> str | bool:

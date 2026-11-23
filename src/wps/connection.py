@@ -27,6 +27,7 @@ import src.wifi.collector
 from src import logger
 from src.settings import Settings
 from src.prompts import Prompter, CLIPrompter
+from src.session import SessionStore
 
 class ConnectionStatus:
     """Stores WPS connection details and status."""
@@ -50,10 +51,12 @@ class ConnectionStatus:
 class Initialize:
     """WPS connection"""
 
-    def __init__(self, interface: str, settings: Settings = None, prompter: Prompter = None):
+    def __init__(self, interface: str, settings: Settings = None, prompter: Prompter = None,
+                 session: SessionStore = None):
         self.INTERFACE = interface
         self.SETTINGS = settings if settings is not None else Settings(interface=interface)
         self.PROMPTER = prompter if prompter is not None else CLIPrompter()
+        self.session = session if session is not None else SessionStore()
 
         self.CONNECTION_STATUS = ConnectionStatus()
         self.PIXIE_CREDS  = src.wps.pixiewps.Data()
@@ -105,7 +108,6 @@ class Initialize:
         attacks if enabled and manages storing PINs on connection failure
         """
 
-        pixiewps_dir = src.utils.PIXIEWPS_DIR
         generator    = src.wps.generator.WPSpin(prompter=self.PROMPTER)
         collector    = src.wifi.collector.WiFiCollector()
 
@@ -114,16 +116,13 @@ class Initialize:
             pin = '00000000'
         elif pin is None:
             if self.SETTINGS.pixie_dust:
-                try:
-                    filename = f'''{pixiewps_dir}{bssid.replace(':', '').upper()}.run'''
-
-                    with open(filename, 'r', encoding='utf-8') as file:
-                        t_pin = file.readline().strip()
-                        if self.PROMPTER.confirm(f'[?] Use previously calculated PIN {t_pin}? [n/Y] '):
-                            pin = t_pin
-                        else:
-                            raise FileNotFoundError
-                except FileNotFoundError:
+                self.session.upsert_target(bssid)
+                saved_pin = self.session.get_pixie_pin(bssid)
+                if saved_pin is not None and self.PROMPTER.confirm(
+                    f'[?] Use previously calculated PIN {saved_pin}? [n/Y] '
+                ):
+                    pin = saved_pin
+                else:
                     pin = generator.getLikely(bssid) or '12345670'
             elif not pbc_mode:
                 # If not pixiemode, ask user to select a pin from the list
@@ -138,7 +137,8 @@ class Initialize:
                 self._wpsConnection(bssid, pin, retry_on_lock=True)
             except KeyboardInterrupt:
                 logger.info('Aborting…')
-                collector.writePin(bssid, pin)
+                self.session.upsert_target(bssid)
+                self.session.update_pixie_pin(bssid, pin)
                 return False
         else:
             self._wpsConnection(bssid, pin, retry_on_lock=True)
@@ -148,12 +148,7 @@ class Initialize:
             if self.SETTINGS.write:
                 collector.writeResult(bssid, self.CONNECTION_STATUS.ESSID, pin, self.CONNECTION_STATUS.WPA_PSK)
             if not pbc_mode:
-                # Try to remove temporary PIN file
-                try:
-                    filename = f'''{pixiewps_dir}{bssid.replace(':', '').upper()}.run'''
-                    os.remove(filename)
-                except FileNotFoundError:
-                    pass
+                self.session.clear_pixie_pin(bssid)
             return True
         if self.SETTINGS.pixie_dust:
             if self.PIXIE_CREDS.getAll():
@@ -167,7 +162,8 @@ class Initialize:
 
         if store_pin_on_fail:
             # Saving Pixiewps calculated PIN if can't connect
-            collector.writePin(bssid, pin)
+            self.session.upsert_target(bssid)
+            self.session.update_pixie_pin(bssid, pin)
         return False
 
     def _initWpaSupplicant(self):

@@ -63,15 +63,3 @@ class WiFiCollector:
             csv_writer.writerow([date_str, bssid, essid, wps_pin, wpa_psk])
 
         logger.info(f'[*] Credentials saved to {filename}.txt, {filename}.csv')
-
-    @staticmethod
-    def writePin(bssid: str, pin: str):
-        """Writes PIN to a file for later use."""
-
-        pixiewps_dir = src.utils.PIXIEWPS_DIR
-        filename = f'''{pixiewps_dir}{bssid.replace(':', '').upper()}.run'''
-
-        with open(filename, 'w', encoding='utf-8') as file:
-            file.write(pin)
-
-        logger.info(f'[*] PIN saved in {filename}')

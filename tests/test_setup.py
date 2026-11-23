@@ -4,6 +4,7 @@ import pytest
 
 import src.setup as setup
 from src.errors import FatalError
+from src.session import SessionStore
 
 
 def test_check_requirements_dies_on_missing_binary(monkeypatch):
@@ -44,3 +45,18 @@ def test_setup_directories_creates_sessions_and_pixiewps_dirs(tmp_path, monkeypa
     setup.setupDirectories()
     assert os.path.exists(sessions_dir)
     assert os.path.exists(pixiewps_dir)
+
+
+def test_setup_directories_runs_legacy_migration(tmp_path, monkeypatch):
+    sessions_dir = str(tmp_path / "sessions") + "/"
+    pixiewps_dir = str(tmp_path / "pixiewps") + "/"
+    monkeypatch.setattr("src.utils.SESSIONS_DIR", sessions_dir)
+    monkeypatch.setattr("src.utils.PIXIEWPS_DIR", pixiewps_dir)
+    os.makedirs(sessions_dir)
+    with open(sessions_dir + "AABBCCDDEEFF.run", "w", encoding="utf-8") as f:
+        f.write("1234567")
+
+    setup.setupDirectories()
+
+    store = SessionStore()  # default path, now pointed at the monkeypatched SESSIONS_DIR
+    assert store.get_bruteforce_mask("AA:BB:CC:DD:EE:FF") == "1234567"

@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from src import logger
 from src.events import Event, EventBus
 from src.prompts import Prompter
+from src.session import SessionStore
 from src.settings import Settings
 from src.wps.connection import Initialize
 
@@ -25,9 +26,12 @@ class FakePrompter(Prompter):
         return 0
 
 
-def _make_initialize_with_fakes(monkeypatch, settings=None, prompter=None):
+def _make_initialize_with_fakes(monkeypatch, tmp_path, settings=None, prompter=None):
     monkeypatch.setattr(Initialize, "_initWpaSupplicant", lambda self: None)
-    conn = Initialize("wlan0", settings=settings, prompter=prompter)
+    # Always pass an explicit, tmp_path-scoped SessionStore so these tests
+    # never touch the real default ~/.OneShot-Extended/sessions/ path.
+    session = SessionStore(tmp_path / "s.sqlite3")
+    conn = Initialize("wlan0", settings=settings, prompter=prompter, session=session)
     conn.WPAS = MagicMock()
     # No real _wpsConnection (no real wpa_supplicant socket) — the status
     # just stays unset ('' not GOT_PSK), which is what we need to reach
@@ -37,13 +41,12 @@ def _make_initialize_with_fakes(monkeypatch, settings=None, prompter=None):
 
 
 def test_pixie_reuse_confirm_uses_injected_prompter(tmp_path, monkeypatch):
-    monkeypatch.setattr("src.utils.PIXIEWPS_DIR", str(tmp_path) + "/")
     bssid = "AA:BB:CC:DD:EE:FF"
-    (tmp_path / "AABBCCDDEEFF.run").write_text("12345670")
-
     fake = FakePrompter(confirm_returns=True)
     settings = Settings(interface="wlan0", pixie_dust=True)
-    conn = _make_initialize_with_fakes(monkeypatch, settings=settings, prompter=fake)
+    conn = _make_initialize_with_fakes(monkeypatch, tmp_path, settings=settings, prompter=fake)
+    conn.session.upsert_target(bssid)
+    conn.session.update_pixie_pin(bssid, "12345670")
 
     conn.singleConnection(bssid=bssid)
 
@@ -52,17 +55,16 @@ def test_pixie_reuse_confirm_uses_injected_prompter(tmp_path, monkeypatch):
 
 
 def test_pixie_reuse_declined_falls_back_to_generator(tmp_path, monkeypatch):
-    monkeypatch.setattr("src.utils.PIXIEWPS_DIR", str(tmp_path) + "/")
     # This BSSID matches the 'pin24' vendor algorithm (see Task 7's golden
     # cases), which generator.getLikely() will return deterministically —
     # distinct from both the saved pin below and the '12345670' literal
     # fallback, so a wrong branch is unambiguously detectable.
     bssid = "04:BF:6D:11:22:33"
-    (tmp_path / "04BF6D112233.run").write_text("99999990")
-
     fake = FakePrompter(confirm_returns=False)
     settings = Settings(interface="wlan0", pixie_dust=True)
-    conn = _make_initialize_with_fakes(monkeypatch, settings=settings, prompter=fake)
+    conn = _make_initialize_with_fakes(monkeypatch, tmp_path, settings=settings, prompter=fake)
+    conn.session.upsert_target(bssid)
+    conn.session.update_pixie_pin(bssid, "99999990")
 
     used_pins = []
     monkeypatch.setattr(conn, "_wpsConnection", lambda bssid, pin, **kw: used_pins.append(pin))
@@ -73,19 +75,19 @@ def test_pixie_reuse_declined_falls_back_to_generator(tmp_path, monkeypatch):
     assert used_pins == ["11228677"]
 
 
-def test_default_prompter_is_cli_prompter_when_none_given(monkeypatch):
-    conn = _make_initialize_with_fakes(monkeypatch)
+def test_default_prompter_is_cli_prompter_when_none_given(tmp_path, monkeypatch):
+    conn = _make_initialize_with_fakes(monkeypatch, tmp_path)
     assert conn.PROMPTER is not None
 
 
-def test_verbose_passthrough_uses_logger_raw_not_bare_print(monkeypatch, capsys):
+def test_verbose_passthrough_uses_logger_raw_not_bare_print(tmp_path, monkeypatch, capsys):
     bus = EventBus()
     seen = []
     bus.subscribe(lambda e: seen.append(e))
     logger.set_event_bus(bus)
 
     settings = Settings(interface="wlan0", verbose=True)
-    conn = _make_initialize_with_fakes(monkeypatch, settings=settings)
+    conn = _make_initialize_with_fakes(monkeypatch, tmp_path, settings=settings)
     conn.WPAS.stdout.readline.return_value = "some wpa_supplicant debug line\n"
 
     conn._handleWpas()  # pylint: disable=protected-access
@@ -96,14 +98,14 @@ def test_verbose_passthrough_uses_logger_raw_not_bare_print(monkeypatch, capsys)
     assert "some wpa_supplicant debug line" not in capsys.readouterr().out
 
 
-def test_non_verbose_does_not_emit_raw_passthrough(monkeypatch):
+def test_non_verbose_does_not_emit_raw_passthrough(tmp_path, monkeypatch):
     bus = EventBus()
     seen = []
     bus.subscribe(lambda e: seen.append(e))
     logger.set_event_bus(bus)
 
     settings = Settings(interface="wlan0", verbose=False)
-    conn = _make_initialize_with_fakes(monkeypatch, settings=settings)
+    conn = _make_initialize_with_fakes(monkeypatch, tmp_path, settings=settings)
     conn.WPAS.stdout.readline.return_value = "some wpa_supplicant debug line\n"
 
     conn._handleWpas()  # pylint: disable=protected-access

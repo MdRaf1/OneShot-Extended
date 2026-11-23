@@ -26,6 +26,7 @@ from pathlib import Path
 
 from src import logger
 import src.utils
+import src.session
 
 
 def checkRequirements():
@@ -62,6 +63,10 @@ def setupDirectories():
     for directory in [src.utils.SESSIONS_DIR, src.utils.PIXIEWPS_DIR]:
         if not os.path.exists(directory):
             os.makedirs(directory)
+
+    src.session.migrate_legacy_run_files(
+        src.session.SessionStore(), src.utils.SESSIONS_DIR, src.utils.PIXIEWPS_DIR
+    )
 
 def setupMediatekWifi(wmt_wifi_device: Path):
     """Initialize MediaTek WiFi dev"""
