@@ -19,16 +19,19 @@ import subprocess
 from src import logger
 from src.utils import REPORTS_DIR
 from src.settings import Settings
+from src.prompts import Prompter, CLIPrompter
 
 import src.utils
 
 class WiFiScanner:
     """Handles parsing scan results and table."""
 
-    def __init__(self, interface: str, vuln_list: str = None, settings: Settings = None):
+    def __init__(self, interface: str, vuln_list: str = None, settings: Settings = None,
+                 prompter: Prompter = None):
         self.INTERFACE = interface
         self.VULN_LIST = vuln_list
         self.settings = settings if settings is not None else Settings(interface=interface)
+        self.prompter = prompter if prompter is not None else CLIPrompter()
 
         reports_fname = REPORTS_DIR + 'stored.csv'
 
@@ -63,24 +66,22 @@ class WiFiScanner:
             return
 
         while True:
-            try:
-                network_no = input('Select target (press Enter to refresh): ')
+            index = self.prompter.select_index(
+                'Select target (press Enter to refresh): ',
+                len(networks),
+                cancel_tokens=frozenset({'r', 'R', '0', ''})
+            )
 
-                if network_no.lower() in {'r', '0', ''}:
-                    if self.settings.clear:
-                        src.utils.clearScreen()
-                    result = self.promptNetwork()
-                    if result is None:
-                        continue
-                    return result
+            if index is None:
+                if self.settings.clear:
+                    src.utils.clearScreen()
+                result = self.promptNetwork()
+                if result is None:
+                    continue
+                return result
 
-                if int(network_no) in networks.keys():
-                    selected_network = networks[int(network_no)]
-                    return (selected_network['BSSID'], selected_network)
-
-                raise IndexError
-            except (IndexError, ValueError):
-                logger.warning('Invalid number')
+            selected_network = networks[index + 1]
+            return (selected_network['BSSID'], selected_network)
 
     def _iwScanner(self) -> dict[int, dict] | bool:
         """Parsing iw scan results."""
