@@ -22,6 +22,7 @@ import src.wps.generator
 import src.wps.connection
 import src.utils
 from src.settings import Settings
+from src.prompts import Prompter, CLIPrompter
 
 class BruteforceStatus:
     """Stores bruteforce details and status."""
@@ -71,13 +72,14 @@ class BruteforceStatus:
 class Initialize:
     """Handles bruteforce"""
 
-    def __init__(self, interface: str, settings: Settings = None):
+    def __init__(self, interface: str, settings: Settings = None, prompter: Prompter = None):
         self.settings = settings if settings is not None else Settings(interface=interface)
+        self.prompter = prompter if prompter is not None else CLIPrompter()
         self.BRUTEFORCE_STATUS = BruteforceStatus()
         self.CONNECTION_STATUS = src.wps.connection.ConnectionStatus()
         self.GENERATOR  = src.wps.generator.WPSpin()
         self.CONNECTION = src.wps.connection.Initialize(
-            interface, self.settings
+            interface, self.settings, self.prompter
         )
 
     def _firstHalfBruteforce(self, bssid: str, first_half: str) -> str | bool:
@@ -162,7 +164,7 @@ class Initialize:
             try:
                 # Trying to restore previous session
                 with open(filename, 'r', encoding='utf-8') as file:
-                    if input(f'[?] Restore previous session for {bssid}? [n/Y]').lower() != 'n':
+                    if self.prompter.confirm(f'[?] Restore previous session for {bssid}? [n/Y]'):
                         mask = file.readline().strip()
                     else:
                         raise FileNotFoundError
