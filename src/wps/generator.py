@@ -12,6 +12,7 @@
 #  GNU General Public License for more details.
 
 from src import logger
+from src.prompts import Prompter, CLIPrompter
 
 class NetworkAddress:
     """Handles MAC addresses"""
@@ -85,7 +86,8 @@ class NetworkAddress:
 class WPSpin:
     """WPS pin generator."""
 
-    def __init__(self):
+    def __init__(self, prompter: Prompter = None):
+        self.prompter = prompter if prompter is not None else CLIPrompter()
         self.ALGO_MAC = 0
         self.ALGO_EMPTY = 1
         self.ALGO_STATIC = 2
@@ -139,17 +141,8 @@ class WPSpin:
                     number, pin['pin'], pin['name'])
                 logger.info(line)
 
-            while True:
-                pin_no = input('Select the PIN: ')
-                try:
-                    if int(pin_no) in range(1, len(pins) + 1):
-                        pin = pins[int(pin_no) - 1]['pin']
-                    else:
-                        raise ValueError
-                except ValueError:
-                    logger.warning('Invalid number')
-                else:
-                    break
+            index = self.prompter.select_index('Select the PIN: ', len(pins))
+            pin = pins[index]['pin']
 
         elif len(pins) == 1:
             pin = pins[0]
@@ -168,6 +161,13 @@ class WPSpin:
             return res[0]
 
         return None
+
+    def getAllLikely(self, bssid: str) -> list:
+        """Returns every vendor-likely PIN candidate for a BSSID (public
+        wrapper around _getSuggestedList, for the orchestrator's
+        DEFAULT_PINS auto-chain step)."""
+
+        return self._getSuggestedList(bssid)
 
     @staticmethod
     def checksum(pin: int) -> int:
