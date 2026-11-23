@@ -18,18 +18,17 @@ import subprocess
 
 from src import logger
 from src.utils import REPORTS_DIR
+from src.settings import Settings
 
-import src.args
 import src.utils
-
-args = src.args.parseArgs()
 
 class WiFiScanner:
     """Handles parsing scan results and table."""
 
-    def __init__(self, interface: str, vuln_list: str = None):
+    def __init__(self, interface: str, vuln_list: str = None, settings: Settings = None):
         self.INTERFACE = interface
         self.VULN_LIST = vuln_list
+        self.settings = settings if settings is not None else Settings(interface=interface)
 
         reports_fname = REPORTS_DIR + 'stored.csv'
 
@@ -68,7 +67,7 @@ class WiFiScanner:
                 network_no = input('Select target (press Enter to refresh): ')
 
                 if network_no.lower() in {'r', '0', ''}:
-                    if args.clear:
+                    if self.settings.clear:
                         src.utils.clearScreen()
                     result = self.promptNetwork()
                     if result is None:
@@ -195,7 +194,7 @@ class WiFiScanner:
 
         lines = iw_scan_process.stdout.splitlines()
 
-        if args.verbose:
+        if self.settings.verbose:
             print('\n'.join(lines))
 
         for line in lines:
@@ -280,7 +279,7 @@ class WiFiScanner:
             **columm_lengths
         ))
 
-        if args.reverse_scan:
+        if self.settings.reverse_scan:
             network_list_items = network_list_items[::-1]
         for n, network in network_list_items:
             # (FOR COMPATIBILITY) pylint: disable=inconsistent-quotes
