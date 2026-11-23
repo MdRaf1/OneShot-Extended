@@ -14,8 +14,13 @@
 import argparse
 import os
 
-def parseArgs():
-    """Parse arguments passed to the main python script."""
+def parseArgs(argv: list[str] | None = None):
+    """Parse arguments passed to the main python script.
+
+    `argv` defaults to None, which makes argparse read sys.argv as before;
+    passing an explicit list (e.g. in tests, or from a future non-CLI
+    caller) parses that instead.
+    """
 
     parser = argparse.ArgumentParser(
         description='''
@@ -157,7 +162,7 @@ Copyright (C) 2026 chkndrp
         help='Show this help message and exit'
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if (args.pixie_force or args.show_pixie) and not args.pixie_dust:
         parser.error('argument -F/--pixie-force and -S/--show-pixie can only be used with -P/--pixie-dust')
