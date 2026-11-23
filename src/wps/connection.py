@@ -23,11 +23,9 @@ import src.wps.pixiewps
 import src.wps.generator
 import src.utils
 import src.wifi.collector
-import src.args
 
 from src import logger
-
-args = src.args.parseArgs()
+from src.settings import Settings
 
 class ConnectionStatus:
     """Stores WPS connection details and status."""
@@ -51,8 +49,9 @@ class ConnectionStatus:
 class Initialize:
     """WPS connection"""
 
-    def __init__(self, interface: str):
+    def __init__(self, interface: str, settings: Settings = None):
         self.INTERFACE = interface
+        self.SETTINGS = settings if settings is not None else Settings(interface=interface)
 
         self.CONNECTION_STATUS = ConnectionStatus()
         self.PIXIE_CREDS  = src.wps.pixiewps.Data()
@@ -109,10 +108,10 @@ class Initialize:
         collector    = src.wifi.collector.WiFiCollector()
 
         # Handle null pin attack
-        if args.null_pin:
+        if self.SETTINGS.null_pin:
             pin = '00000000'
         elif pin is None:
-            if args.pixie_dust:
+            if self.SETTINGS.pixie_dust:
                 try:
                     filename = f'''{pixiewps_dir}{bssid.replace(':', '').upper()}.run'''
 
@@ -144,7 +143,7 @@ class Initialize:
 
         if self.CONNECTION_STATUS.STATUS == 'GOT_PSK':
             self._credentialPrint(pin, self.CONNECTION_STATUS.WPA_PSK, self.CONNECTION_STATUS.ESSID)
-            if args.write:
+            if self.SETTINGS.write:
                 collector.writeResult(bssid, self.CONNECTION_STATUS.ESSID, pin, self.CONNECTION_STATUS.WPA_PSK)
             if not pbc_mode:
                 # Try to remove temporary PIN file
@@ -154,9 +153,9 @@ class Initialize:
                 except FileNotFoundError:
                     pass
             return True
-        if args.pixie_dust:
+        if self.SETTINGS.pixie_dust:
             if self.PIXIE_CREDS.getAll():
-                pin = self.PIXIE_CREDS.runPixieWps(args.show_pixie, args.pixie_force)
+                pin = self.PIXIE_CREDS.runPixieWps(self.SETTINGS.show_pixie, self.SETTINGS.pixie_force)
                 if pin:
                     return self.singleConnection(bssid, pin, store_pin_on_fail=True)
                 return False
@@ -227,7 +226,7 @@ class Initialize:
 
         line = line.rstrip('\n')
 
-        if args.verbose:
+        if self.SETTINGS.verbose:
             print(line)
 
         # Handle WPS protocol messages
@@ -364,7 +363,7 @@ class Initialize:
             raise ValueError(f'Invalid {attr} length: expected {expected_len}, got {len(hex_value)}')
         setattr(self.PIXIE_CREDS, attr, hex_value)
 
-        if args.show_pixie:
+        if self.SETTINGS.show_pixie:
             logger.info(f'{attr}: {hex_value}')
 
     def _decode_essid(self, line: str) -> str:
@@ -444,8 +443,8 @@ class Initialize:
             self._sendOnly('WPS_CANCEL')
 
             if retry_on_lock and self.CONNECTION_STATUS.IS_LOCKED:
-                logger.warning(f'{bssid} is WPS LOCKED. Retrying in {args.timeout}s…')
-                time.sleep(args.timeout)
+                logger.warning(f'{bssid} is WPS LOCKED. Retrying in {self.SETTINGS.timeout}s…')
+                time.sleep(self.SETTINGS.timeout)
                 continue
 
             return self.CONNECTION_STATUS.STATUS == 'GOT_PSK'
