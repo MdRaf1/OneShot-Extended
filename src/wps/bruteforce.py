@@ -23,6 +23,7 @@ import src.wps.connection
 import src.utils
 from src.settings import Settings
 from src.prompts import Prompter, CLIPrompter
+from src.session import SessionStore
 
 class BruteforceStatus:
     """Stores bruteforce details and status."""
@@ -72,9 +73,11 @@ class BruteforceStatus:
 class Initialize:
     """Handles bruteforce"""
 
-    def __init__(self, interface: str, settings: Settings = None, prompter: Prompter = None):
+    def __init__(self, interface: str, settings: Settings = None, prompter: Prompter = None,
+                 session: SessionStore = None):
         self.settings = settings if settings is not None else Settings(interface=interface)
         self.prompter = prompter if prompter is not None else CLIPrompter()
+        self.session = session if session is not None else SessionStore()
         self.BRUTEFORCE_STATUS = BruteforceStatus()
         self.CONNECTION_STATUS = src.wps.connection.ConnectionStatus()
         self.GENERATOR  = src.wps.generator.WPSpin()
@@ -157,18 +160,15 @@ class Initialize:
     def smartBruteforce(self, bssid: str, start_pin: str = None):
         """Attempts to bruteforce a WPS PIN."""
 
-        sessions_dir = src.utils.SESSIONS_DIR
-        filename = f'''{sessions_dir}{bssid.replace(':', '').upper()}.run'''
+        self.session.upsert_target(bssid)
 
         if (not start_pin) or (len(start_pin) < 4):
-            try:
-                # Trying to restore previous session
-                with open(filename, 'r', encoding='utf-8') as file:
-                    if self.prompter.confirm(f'[?] Restore previous session for {bssid}? [n/Y]'):
-                        mask = file.readline().strip()
-                    else:
-                        raise FileNotFoundError
-            except FileNotFoundError:
+            saved_mask = self.session.get_bruteforce_mask(bssid)
+            if saved_mask is not None and self.prompter.confirm(
+                f'[?] Restore previous session for {bssid}? [n/Y]'
+            ):
+                mask = saved_mask
+            else:
                 mask = '0000'
         else:
             mask = start_pin[:7]
@@ -188,9 +188,8 @@ class Initialize:
         except KeyboardInterrupt as e:
             logger.info('Aborting…')
 
-            with open(filename, 'w', encoding='utf-8') as file:
-                file.write(self.BRUTEFORCE_STATUS.MASK)
-            logger.info(f'Session saved in {filename}')
+            self.session.update_bruteforce_mask(bssid, self.BRUTEFORCE_STATUS.MASK)
+            logger.info(f'Session saved for {bssid}')
 
             if self.settings.loop:
                 raise KeyboardInterrupt from e

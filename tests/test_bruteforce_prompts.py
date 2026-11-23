@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 from src.prompts import Prompter
-from src.settings import Settings
+from src.session import SessionStore
 from src.wps.bruteforce import Initialize
 from src.wps.connection import Initialize as ConnectionInitialize
 
@@ -24,9 +24,12 @@ class FakePrompter(Prompter):
         return 0
 
 
-def _make_bruteforce_initialize_with_fakes(monkeypatch, settings=None, prompter=None):
+def _make_bruteforce_initialize_with_fakes(monkeypatch, tmp_path, settings=None, prompter=None):
     monkeypatch.setattr(ConnectionInitialize, "_initWpaSupplicant", lambda self: None)
-    bf = Initialize("wlan0", settings=settings, prompter=prompter)
+    # Always pass an explicit, tmp_path-scoped SessionStore so these tests
+    # never touch the real default ~/.OneShot-Extended/sessions/ path.
+    session = SessionStore(tmp_path / "s.sqlite3")
+    bf = Initialize("wlan0", settings=settings, prompter=prompter, session=session)
     bf.CONNECTION.WPAS = MagicMock()
     # Don't actually attempt any real WPS traffic — smartBruteforce only
     # needs to reach the mask-resolution step for this test.
@@ -36,12 +39,11 @@ def _make_bruteforce_initialize_with_fakes(monkeypatch, settings=None, prompter=
 
 
 def test_resume_confirm_uses_injected_prompter(tmp_path, monkeypatch):
-    monkeypatch.setattr("src.utils.SESSIONS_DIR", str(tmp_path) + "/")
     bssid = "AA:BB:CC:DD:EE:FF"
-    (tmp_path / "AABBCCDDEEFF.run").write_text("1234567")
-
     fake = FakePrompter(confirm_returns=False)
-    bf = _make_bruteforce_initialize_with_fakes(monkeypatch, prompter=fake)
+    bf = _make_bruteforce_initialize_with_fakes(monkeypatch, tmp_path, prompter=fake)
+    bf.session.upsert_target(bssid)
+    bf.session.update_bruteforce_mask(bssid, "1234567")
 
     bf.smartBruteforce(bssid)
 
@@ -52,12 +54,11 @@ def test_resume_confirm_uses_injected_prompter(tmp_path, monkeypatch):
 
 
 def test_resume_confirm_accepted_restores_saved_mask(tmp_path, monkeypatch):
-    monkeypatch.setattr("src.utils.SESSIONS_DIR", str(tmp_path) + "/")
     bssid = "AA:BB:CC:DD:EE:FF"
-    (tmp_path / "AABBCCDDEEFF.run").write_text("1234567")
-
     fake = FakePrompter(confirm_returns=True)
-    bf = _make_bruteforce_initialize_with_fakes(monkeypatch, prompter=fake)
+    bf = _make_bruteforce_initialize_with_fakes(monkeypatch, tmp_path, prompter=fake)
+    bf.session.upsert_target(bssid)
+    bf.session.update_bruteforce_mask(bssid, "1234567")
 
     bf.smartBruteforce(bssid)
 
@@ -65,12 +66,12 @@ def test_resume_confirm_accepted_restores_saved_mask(tmp_path, monkeypatch):
     assert bf.BRUTEFORCE_STATUS.MASK == "1234567"
 
 
-def test_default_prompter_is_cli_prompter_when_none_given(monkeypatch):
-    bf = _make_bruteforce_initialize_with_fakes(monkeypatch)
+def test_default_prompter_is_cli_prompter_when_none_given(tmp_path, monkeypatch):
+    bf = _make_bruteforce_initialize_with_fakes(monkeypatch, tmp_path)
     assert bf.prompter is not None
 
 
-def test_prompter_is_forwarded_to_internal_connection(monkeypatch):
+def test_prompter_is_forwarded_to_internal_connection(tmp_path, monkeypatch):
     fake = FakePrompter()
-    bf = _make_bruteforce_initialize_with_fakes(monkeypatch, prompter=fake)
+    bf = _make_bruteforce_initialize_with_fakes(monkeypatch, tmp_path, prompter=fake)
     assert bf.CONNECTION.PROMPTER is fake
