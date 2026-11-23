@@ -12,9 +12,42 @@
 #  GNU General Public License for more details.
 
 import logging
+import re
 import sys
 
+from src.events import Event
+
 _LOGGER = None
+_EVENT_BUS = None
+
+_ANSI_ESCAPE_RE = re.compile(r'\033\[[0-9;]*m')
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE_RE.sub('', text)
+
+
+def set_event_bus(bus) -> None:
+    """Set (or clear, with None) the EventBus that info/success/warning/
+    error/raw also emit structured Events to, in addition to their
+    existing ANSI-colored console output (which is unchanged either way).
+    """
+
+    global _EVENT_BUS  # pylint: disable=global-statement
+    _EVENT_BUS = bus
+
+
+def raw(message: str) -> None:
+    """Emit a raw, unformatted line — the replacement for the engine's
+    two logger-bypassing print() calls (connection.py's verbose
+    passthrough, pixiewps.py's raw tool output). Emits via the event bus
+    if one is set, else prints exactly as the old bare print() did.
+    """
+
+    if _EVENT_BUS is not None:
+        _EVENT_BUS.emit(Event(kind='raw', level='info', message=_strip_ansi(message)))
+    else:
+        print(message)
 
 class _ColorFormatter(logging.Formatter):
     """Custom formatter that adds colored log level prefixes"""
@@ -82,6 +115,8 @@ def info(message: str):
         initializeLogging()
 
     _LOGGER.info(message)
+    if _EVENT_BUS is not None:
+        _EVENT_BUS.emit(Event(kind='info', level='info', message=_strip_ansi(message)))
 
 def success(message: str):
     """Log a success message (uses [+] prefix)"""
@@ -91,6 +126,8 @@ def success(message: str):
 
     # We need to manually add [+] since logging doesn't have a SUCCESS level
     _LOGGER.info('[+] %s', message)
+    if _EVENT_BUS is not None:
+        _EVENT_BUS.emit(Event(kind='success', level='success', message=_strip_ansi(message)))
 
 def warning(message: str):
     """Log a warning message"""
@@ -99,6 +136,8 @@ def warning(message: str):
         initializeLogging()
 
     _LOGGER.warning(message)
+    if _EVENT_BUS is not None:
+        _EVENT_BUS.emit(Event(kind='warning', level='warning', message=_strip_ansi(message)))
 
 def error(message: str):
     """Log an error message"""
@@ -107,3 +146,5 @@ def error(message: str):
         initializeLogging()
 
     _LOGGER.error(message)
+    if _EVENT_BUS is not None:
+        _EVENT_BUS.emit(Event(kind='error', level='error', message=_strip_ansi(message)))

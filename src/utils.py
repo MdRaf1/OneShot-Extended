@@ -20,6 +20,7 @@ import time
 
 from shutil import which
 from src import logger
+from src.errors import FatalError
 
 USER_HOME = str(pathlib.Path.home())
 SESSIONS_DIR = f'{USER_HOME}/.OneShot-Extended/sessions/'
@@ -298,6 +299,13 @@ def clearScreen():
     sys.stdout.flush()
 
 def die(text: str):
-    """Print an error and exit with non-zero exit code."""
+    """Raise a FatalError for the caller to handle.
 
-    sys.exit(f'[!] {text} \n')
+    Used to be a hard sys.exit(); now raises instead, so a fatal error
+    inside a non-main thread (e.g. a GUI background thread) is observable
+    instead of silently killing only that thread. ose.py's CLI entrypoint
+    catches FatalError at the top and reproduces the old exit behavior
+    exactly.
+    """
+
+    raise FatalError(text)

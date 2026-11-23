@@ -13,14 +13,12 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
 
-import os
 import sys
 
 # pylint: disable=wrong-import-position
 if sys.version_info < (3, 11):
     sys.exit('Python 3.11 or higher is required to run this script.')
 
-from shutil import which
 from pathlib import Path
 from src import logger
 
@@ -29,42 +27,9 @@ import src.wifi.scanner
 import src.wps.connection
 import src.wps.bruteforce
 import src.utils
+import src.setup
 import src.args
-
-def checkRequirements():
-    """Verify requirements are met"""
-
-    required_binaries = [
-        'pixiewps',
-        'wpa_supplicant',
-        'iw', 'ip'
-    ]
-    missing = [b for b in required_binaries if not which(b)]
-
-    if missing:
-        src.utils.die(f"Missing required utilities: {', '.join(missing)}")
-
-    if os.getuid() != 0:
-        src.utils.die('Run it as root')
-
-def setupDirectories():
-    """Create required directories"""
-
-    # We recently changed the PIXIEWPS_DIR and SESSIONS_DIR path
-    # Rename older .OSE data dir to .OneShot-Extended, and maintain compatibility
-    old_dir = os.path.expanduser('~/.OSE')
-    new_dir = os.path.expanduser('~/.OneShot-Extended')
-
-    if os.path.exists(old_dir):
-        try:
-            os.rename(old_dir, new_dir)
-            logger.info('Renamed legacy data directory')
-        except OSError as e:
-            logger.error(f'Failed to rename data directory: {e}')
-
-    for directory in [src.utils.SESSIONS_DIR, src.utils.PIXIEWPS_DIR]:
-        if not os.path.exists(directory):
-            os.makedirs(directory)
+from src.errors import FatalError
 
 def setupAndroidWifi(android_network: src.wifi.android.AndroidNetwork, enable: bool = False):
     """Configure Android-specific WiFi settings"""
@@ -74,16 +39,6 @@ def setupAndroidWifi(android_network: src.wifi.android.AndroidNetwork, enable: b
     else:
         android_network.storeAlwaysScanState()
         android_network.disableWifi()
-
-def setupMediatekWifi(wmt_wifi_device: Path):
-    """Initialize MediaTek WiFi dev"""
-
-    if not wmt_wifi_device.is_char_device():
-        src.utils.die('Unable to activate MediaTek Wi-Fi interface device (--mtk-wifi): '
-                     '/dev/wmtWifi does not exist or it is not a character device')
-
-    wmt_wifi_device.chmod(0o644)
-    wmt_wifi_device.write_text('1', encoding='utf-8')
 
 
 def scanForNetworks(interface: str, vuln_list: list[str]) -> tuple[str, dict] | None:
@@ -138,11 +93,11 @@ def handleConnection(args):
             if success and args.pixie_dust and network_info:
                 src.utils.addVulnerableAP(network_info, args.vuln_list)
 
-def main():
+def _run():
     """Main os-e code"""
 
-    checkRequirements()
-    setupDirectories()
+    src.setup.checkRequirements()
+    src.setup.setupDirectories()
 
     args = src.args.parseArgs()
     logger.initializeLogging()
@@ -164,7 +119,7 @@ def main():
 
             if args.mtk_wifi:
                 wmt_wifi_device = Path('/dev/wmtWifi')
-                setupMediatekWifi(wmt_wifi_device)
+                src.setup.setupMediatekWifi(wmt_wifi_device)
 
             if src.utils.ifaceCtl(args.interface, action='up'):
                 src.utils.die(f'Unable to up interface \'{args.interface}\'')
@@ -198,6 +153,16 @@ def main():
 
             if args.restore:
                 src.utils.restoreProcesses()
+
+def main():
+    """CLI entrypoint: run _run(), converting any FatalError raised deep
+    inside the engine (src.utils.die()) into the same exit behavior the
+    old sys.exit()-based die() produced."""
+
+    try:
+        _run()
+    except FatalError as e:
+        sys.exit(f'[!] {e} \n')
 
 if __name__ == '__main__':
     main()
