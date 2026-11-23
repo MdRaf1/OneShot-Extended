@@ -33,12 +33,15 @@ updates (log_screen.append, queue_screen.refresh).
 """
 
 import queue
+import sys
 import threading
+from shutil import which
 
 import termuxgui as tg
 
 from src import logger
 from src import setup as ose_setup
+from src.errors import FatalError
 from src.events import EventBus
 from src.gui.log_screen import LogScreen
 from src.gui.pbc_screen import PbcScreen
@@ -51,8 +54,27 @@ DEFAULT_INTERFACE = "wlan0"
 
 
 def main() -> None:
+    """Entrypoint: run _run(), converting any FatalError raised during
+    setup (missing root, missing binary, missing termux-am, ...) into a
+    clean exit instead of a raw traceback — mirrors ose.py's own
+    main()/_run() split."""
+
+    try:
+        _run()
+    except FatalError as e:
+        sys.exit(f'[!] {e} \n')
+
+
+def _run() -> None:
     ose_setup.checkRequirements()
     ose_setup.setupDirectories()
+
+    if which('termux-am') is None:
+        raise FatalError(
+            "termux-am not found on PATH — install it with 'pkg install -y "
+            "termux-tools' (the termuxgui package needs it to reach the "
+            "Termux:GUI plugin app)"
+        )
 
     settings = Settings(interface=DEFAULT_INTERFACE)
 
