@@ -86,12 +86,12 @@ replacement for Termux.
 
 #### Setup:
 ```shell
-pkg install -y termux-gui termux-tools
+pkg install -y termux-gui termux-am-socket
 pip install termuxgui
 ```
-`termux-tools` provides `termux-am`, which the `termuxgui` package needs
-to reach the plugin app — if it's missing, `ose_gui.py` exits with a
-clear `[!] termux-am not found...` message telling you to install it.
+`termux-am-socket` provides `termux-am`, which the `termuxgui` package
+needs to reach the plugin app — if it's missing, `ose_gui.py` exits with
+a clear `[!] termux-am not found...` message telling you to install it.
 Then install the **Termux:GUI** plugin app itself from
 [F-Droid](https://f-droid.org/packages/com.termux.gui/) or
 [GitHub releases](https://github.com/termux/termux-gui/releases), and open

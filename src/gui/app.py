@@ -72,7 +72,7 @@ def _run() -> None:
     if which('termux-am') is None:
         raise FatalError(
             "termux-am not found on PATH — install it with 'pkg install -y "
-            "termux-tools' (the termuxgui package needs it to reach the "
+            "termux-am-socket' (the termuxgui package needs it to reach the "
             "Termux:GUI plugin app)"
         )
 

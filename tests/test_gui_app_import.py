@@ -128,5 +128,5 @@ def test_run_raises_fatal_error_when_termux_am_is_missing(monkeypatch):
     monkeypatch.setattr(app.ose_setup, "setupDirectories", lambda: None)
     monkeypatch.setattr(app, "which", lambda binary: None)
 
-    with pytest.raises(FatalError, match="termux-tools"):
+    with pytest.raises(FatalError, match="termux-am-socket"):
         app._run()  # pylint: disable=protected-access
