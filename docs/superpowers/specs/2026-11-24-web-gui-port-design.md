@@ -139,6 +139,24 @@ unchanged; only the UI binding is being swapped.
   including the same kind of on-device follow-up list the old section
   had — now much shorter, since there's no plugin-app handshake to
   verify).
+- No SSE backlog/replay buffer. A (re)connecting client re-fetches
+  current state via a plain GET for the Queue/Scan screens (the same
+  "pull a fresh snapshot" pattern `queue_screen.refresh()` already used
+  under Termux:GUI, just over HTTP instead of a GUI event loop); the Log
+  screen only shows events from the moment it's connected. A gap during a
+  dropped connection is an existing limitation carried over as-is, not a
+  new one — the old Termux:GUI app had the identical gap whenever its
+  Activity was torn down and its subscription with it.
+- `ose_web.py` does not auto-launch a browser. It starts the server and
+  prints the URL to open; the user opens it themselves. Auto-launching
+  one (`termux-open-url` or similar) would reintroduce exactly the
+  category of fragile, Android-specific launch plumbing this whole move
+  exists to get away from.
+- The interface stays hardcoded to `wlan0` (`DEFAULT_INTERFACE`, same
+  constant name/value `src/gui/app.py` used) — no in-page interface
+  picker. This matches what the Termux:GUI layer actually shipped (an
+  interface picker was mentioned early in the original Termux:GUI design
+  but never built), confirmed with the user rather than assumed.
 
 ## What's left to the builder
 
