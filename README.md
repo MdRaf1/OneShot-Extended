@@ -89,6 +89,15 @@ reachable from the rest of the network.
 pip install -r requirements-web.txt
 ```
 
+**On Termux**, this pulls in Pydantic v2, whose `pydantic-core` is a Rust
+extension with no prebuilt wheel for Android and no working Rust compiler
+on-device (a known upstream Termux issue, not specific to this tool) — the
+install will fail trying to build it from source. Install this instead,
+which uses an older FastAPI still built on pure-Python Pydantic v1:
+```shell
+pip install "fastapi<0.110" "pydantic<2" uvicorn
+```
+
 #### Launch:
 ```shell
 sudo python ose_web.py
