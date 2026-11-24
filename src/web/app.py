@@ -33,6 +33,7 @@ import src.wps.connection as connection
 from src.events import EventBus
 from src.orchestrator import Orchestrator
 from src.settings import Settings
+from src.web import routes_queue
 from src.web.queue_runner import QueueRunner
 from src.wifi.scanner import WiFiScanner
 
@@ -60,5 +61,7 @@ def create_app(
     @app.get("/api/health")
     def health() -> dict:
         return {"status": "ok"}
+
+    app.include_router(routes_queue.router)
 
     return app
