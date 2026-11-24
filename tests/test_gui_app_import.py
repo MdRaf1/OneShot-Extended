@@ -1,3 +1,4 @@
+import os
 import sys
 import types
 
@@ -109,13 +110,15 @@ def test_main_exits_cleanly_on_fatal_error_instead_of_raising(monkeypatch):
     assert "boom" in str(excinfo.value)
 
 
-def test_run_raises_fatal_error_when_termux_am_is_missing(monkeypatch):
-    # termuxgui's Connection() shells out to the termux-am binary
-    # (provided by the Termux package `termux-tools`) to reach the
-    # Termux:GUI plugin app. Without it, tg.Connection() raised an
-    # uncaught FileNotFoundError deep inside the termuxgui package; this
-    # must instead surface as a clear, actionable FatalError before any
-    # Connection is attempted.
+def test_run_raises_fatal_error_when_neither_termux_am_nor_am_exist(monkeypatch):
+    # termuxgui's Connection() shells out to the termux-am binary to
+    # reach the Termux:GUI plugin app. Without it, tg.Connection() raised
+    # an uncaught FileNotFoundError deep inside the termuxgui package;
+    # this must instead surface as a clear, actionable FatalError before
+    # any Connection is attempted — but only when there's truly no way
+    # to reach the plugin (see test_ensure_termux_am_available_* below
+    # for the case where a working `am` lets us route around a missing
+    # `termux-am`).
     import pytest  # pylint: disable=import-outside-toplevel
 
     _reimport_gui_modules(monkeypatch)
@@ -128,5 +131,65 @@ def test_run_raises_fatal_error_when_termux_am_is_missing(monkeypatch):
     monkeypatch.setattr(app.ose_setup, "setupDirectories", lambda: None)
     monkeypatch.setattr(app, "which", lambda binary: None)
 
-    with pytest.raises(FatalError, match="termux-am-socket"):
+    with pytest.raises(FatalError, match="termux-am"):
         app._run()  # pylint: disable=protected-access
+
+
+def test_ensure_termux_am_available_is_noop_when_termux_am_present(monkeypatch):
+    # Regression on-device finding: a Termux package can be literally
+    # named `termux-am` (0.8.0-2) yet install its binary as plain `am`,
+    # not as `termux-am` — so `termux-am` being present must short-circuit
+    # before any shim/PATH logic runs.
+    _reimport_gui_modules(monkeypatch)
+    import importlib  # pylint: disable=import-outside-toplevel
+    app = importlib.import_module("src.gui.app")
+
+    original_path = os.environ.get("PATH", "")
+    app._ensure_termux_am_available(
+        which_fn=lambda b: "/fake/bin/termux-am" if b == "termux-am" else None
+    )
+    assert os.environ.get("PATH", "") == original_path
+
+
+def test_ensure_termux_am_available_raises_when_neither_present(monkeypatch):
+    _reimport_gui_modules(monkeypatch)
+    import importlib  # pylint: disable=import-outside-toplevel
+    app = importlib.import_module("src.gui.app")
+
+    from src.errors import FatalError  # pylint: disable=import-outside-toplevel
+    import pytest  # pylint: disable=import-outside-toplevel
+
+    with pytest.raises(FatalError, match="termux-am"):
+        app._ensure_termux_am_available(which_fn=lambda b: None)
+
+
+def test_ensure_termux_am_available_shims_termux_am_onto_path_when_only_am_exists(tmp_path, monkeypatch):
+    # On-device finding: the `termux-am` Termux package installs its
+    # binary as plain `am`. termuxgui's Connection() hardcodes the exact
+    # name "termux-am" with no handling for it being entirely absent
+    # (only for it timing out) — so when only `am` is on PATH, we must
+    # make "termux-am" resolve to something that forwards to it, without
+    # touching termuxgui's own code or Termux's real directories.
+    import shutil
+    import subprocess
+
+    _reimport_gui_modules(monkeypatch)
+    import importlib  # pylint: disable=import-outside-toplevel
+    app = importlib.import_module("src.gui.app")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_am = fake_bin / "am"
+    fake_am.write_text("#!/bin/sh\necho called-am \"$@\"\n")
+    fake_am.chmod(0o755)
+
+    monkeypatch.setenv("PATH", str(fake_bin))
+    monkeypatch.setattr(app, "_TERMUX_SH", "/bin/sh")  # portable for this test env
+
+    app._ensure_termux_am_available(which_fn=shutil.which)
+
+    shim = shutil.which("termux-am")
+    assert shim is not None
+
+    result = subprocess.run([shim, "hello", "world"], capture_output=True, text=True, check=True)
+    assert result.stdout.strip() == "called-am hello world"

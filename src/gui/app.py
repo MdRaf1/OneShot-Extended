@@ -32,8 +32,11 @@ between GUI events and is the only place that turns those into View
 updates (log_screen.append, queue_screen.refresh).
 """
 
+import os
 import queue
+import stat
 import sys
+import tempfile
 import threading
 from shutil import which
 
@@ -52,6 +55,11 @@ from src.settings import Settings
 
 DEFAULT_INTERFACE = "wlan0"
 
+# Android always provides a system shell here, regardless of which (if
+# any) Termux package provides `am`/`termux-am` — used only as the
+# shim's shebang, never to invoke am itself.
+_TERMUX_SH = "/system/bin/sh"
+
 
 def main() -> None:
     """Entrypoint: run _run(), converting any FatalError raised during
@@ -65,16 +73,48 @@ def main() -> None:
         sys.exit(f'[!] {e} \n')
 
 
+def _ensure_termux_am_available(which_fn=which) -> None:
+    """termuxgui's Connection() hardcodes the literal command name
+    "termux-am" with no fallback for it being entirely absent (only for
+    it timing out, which it then retries via plain `am`). Confirmed
+    on-device: a Termux package can be literally named `termux-am`
+    (0.8.0-2) yet install its own binary as plain `am`, not `termux-am` —
+    and the newer `termux-am-socket` package (which does provide a real
+    `termux-am` wrapper) isn't published on every mirror yet.
+
+    Rather than patch the third-party termuxgui package or depend on one
+    specific Termux package existing, this drops a one-line shim exec'ing
+    `am` into a scratch directory prepended to PATH, so termuxgui's
+    hardcoded subprocess call resolves regardless of which of the two
+    binaries Termux happens to provide. No-op if termux-am is already on
+    PATH; raises FatalError only if neither exists at all.
+    """
+
+    if which_fn('termux-am') is not None:
+        return
+
+    if which_fn('am') is None:
+        raise FatalError(
+            "Neither termux-am nor am were found on PATH — install a Termux "
+            "package that provides one of them, e.g. 'pkg install -y "
+            "termux-am' or 'pkg install -y termux-am-socket' (the termuxgui "
+            "package needs one to reach the Termux:GUI plugin app)"
+        )
+
+    shim_dir = tempfile.mkdtemp(prefix='ose-gui-termux-am-shim-')
+    shim_path = os.path.join(shim_dir, 'termux-am')
+    with open(shim_path, 'w', encoding='utf-8') as f:
+        f.write(f'#!{_TERMUX_SH}\nexec am "$@"\n')
+    mode = os.stat(shim_path).st_mode
+    os.chmod(shim_path, mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    os.environ['PATH'] = shim_dir + os.pathsep + os.environ.get('PATH', '')
+
+
 def _run() -> None:
     ose_setup.checkRequirements()
     ose_setup.setupDirectories()
 
-    if which('termux-am') is None:
-        raise FatalError(
-            "termux-am not found on PATH — install it with 'pkg install -y "
-            "termux-am-socket' (the termuxgui package needs it to reach the "
-            "Termux:GUI plugin app)"
-        )
+    _ensure_termux_am_available()
 
     settings = Settings(interface=DEFAULT_INTERFACE)
 
