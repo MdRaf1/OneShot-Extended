@@ -22,7 +22,7 @@ EventBus subscriber callback, which can fire on a background
 
 import termuxgui as tg
 
-from src.gui import presenters
+from src import presenters
 
 MAX_LINES = 200
 

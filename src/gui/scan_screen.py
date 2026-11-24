@@ -22,7 +22,7 @@ WiFiScanner._iwScanner() directly rather than that prompting method.
 
 import termuxgui as tg
 
-from src.gui import presenters
+from src import presenters
 from src.wifi.scanner import WiFiScanner
 
 

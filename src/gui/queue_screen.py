@@ -32,7 +32,7 @@ import threading
 
 import termuxgui as tg
 
-from src.gui import presenters
+from src import presenters
 
 DEFAULT_POLL_INTERVAL = 5.0
 
