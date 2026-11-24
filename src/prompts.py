@@ -20,8 +20,11 @@ class Prompter(ABC):
     """Injectable replacement for the engine's blocking input() calls.
 
     The CLI's CLIPrompter (below) reproduces today's exact terminal
-    behavior; a GUI supplies its own implementation (src.gui.prompter.
-    GuiPrompter) backed by dialog Activities instead of a real terminal.
+    behavior. The web GUI's Orchestrator-driven queue and PBC flow don't
+    need a Prompter implementation of their own at all (the queue uses
+    orchestrator.AutoConfirmPrompter — unattended steps never block on a
+    human — and PBC never resolves a pin), but any future attended UI
+    that does would implement this interface.
     """
 
     @abstractmethod

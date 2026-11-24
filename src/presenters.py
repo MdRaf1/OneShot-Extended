@@ -11,10 +11,10 @@
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
 
-"""Pure GUI data-mapping functions — no I/O, no termuxgui import. This is
-the one part of the GUI layer with real unit test coverage; the thin
-Termux:GUI binding modules (Task 22) call into these rather than
-formatting anything themselves.
+"""Pure GUI data-mapping functions — no I/O, no UI-framework import.
+Framework-agnostic by design, so any front end's route/screen modules
+can call into these rather than formatting anything themselves; used
+today by the web GUI's routes (src/web/).
 """
 
 import re

@@ -6,7 +6,7 @@
 
 This tool performs various WPS attacks without the requirement of monitor mode, or any python dependencies.
 
-This is a fork of [chkndrp/OneShot-Extended](https://github.com/chkndrp/OneShot-Extended), which itself is an improved version of the original OneShot. This fork adds crash-safe session persistence, a multi-target auto-attack queue, and a native Android GUI (Termux:GUI) on top of the existing CLI tool.
+This is a fork of [chkndrp/OneShot-Extended](https://github.com/chkndrp/OneShot-Extended), which itself is an improved version of the original OneShot. This fork adds crash-safe session persistence, a multi-target auto-attack queue, and a local web GUI on top of the existing CLI tool.
 
 ## Features
  - PIN/Null PIN and Push button connection
@@ -15,7 +15,7 @@ This is a fork of [chkndrp/OneShot-Extended](https://github.com/chkndrp/OneShot-
  - Offline WPS PIN generating algorithm
  - Wi-Fi scanner with highlighting based on iw
  - Ability to write to a file
- - Crash-safe multi-target queue with an unattended auto-chain attack and a native Android GUI (see [GUI](#gui-termuxgui) below)
+ - Crash-safe multi-target queue with an unattended auto-chain attack and a local web GUI (see [GUI](#gui-web) below)
 
 ## Advantages over original OneShot
  - Highlighting of a vulnerable WPS version (`1.0`) in the scanner
@@ -74,51 +74,34 @@ git reset --hard origin/master
  sudo python ose.py -i wlan0 -B
  ```
 
-## GUI (Termux:GUI)
-OneShot-Extended also has a native Android GUI, built on
-[Termux:GUI](https://github.com/termux/termux-gui), that scans for WPS
-networks, lets you queue up several of them, and runs an unattended
-auto-chain attack (Null PIN → Pixie Dust → vendor-likely default PINs →
-full bruteforce, stopping at the first success) across the whole queue,
-with a live log and a separate manual PBC screen. It needs the same root
-and binaries as the CLI tool — this is an additional front end, not a
-replacement for Termux.
+## GUI (Web)
+OneShot-Extended also has a local web GUI: it scans for WPS networks,
+lets you queue up several of them, and runs an unattended auto-chain
+attack (Null PIN → Pixie Dust → vendor-likely default PINs → full
+bruteforce, stopping at the first success) across the whole queue, with
+a live log and a separate manual PBC screen. It needs the same root and
+binaries as the CLI tool — this is an additional front end, not a
+replacement for it. The server only binds to `127.0.0.1`; nothing is
+reachable from the rest of the network.
 
 #### Setup:
 ```shell
-pkg install -y termux-gui
-pip install termuxgui
+pip install -r requirements-web.txt
 ```
-The `termuxgui` package needs a `termux-am` (or at least a plain `am`)
-binary on `PATH` to reach the plugin app. Which package actually
-provides this varies by Termux install/mirror — `ose_gui.py` handles
-this automatically: if `termux-am` is missing but `am` is present
-(e.g. from the `termux-am` package, which on some installs provides its
-binary as plain `am` rather than `termux-am`), it transparently routes
-around it. It only fails with a clear `[!] Neither termux-am nor am were
-found...` message if truly neither exists — in that case, try
-`pkg install -y termux-am` or `pkg install -y termux-am-socket`.
-Then install the **Termux:GUI** plugin app itself from
-[F-Droid](https://f-droid.org/packages/com.termux.gui/) or
-[GitHub releases](https://github.com/termux/termux-gui/releases), and open
-it at least once so it's running alongside Termux.
 
 #### Launch:
 ```shell
-sudo python ose_gui.py
+sudo python ose_web.py
 ```
+Then open the printed `http://127.0.0.1:8000` in your browser.
 
 #### Known limitations / required on-device follow-up
-This GUI layer was built and unit-tested without a Termux:GUI plugin or an
-Android device available — its automated test only proves the modules'
-*import structure* is sound, never their behavior against a real plugin.
-The following still need verifying on a real rooted device with a
-WPS-capable AP and the Termux:GUI plugin installed:
-- Real Termux:GUI rendering, event delivery, dialogs, and notifications.
-- The Scan screen against a live `iw` scan.
-- The Queue screen driving a real `Orchestrator.run()` against live
-  `wpa_supplicant`/`pixiewps`.
-- The PBC screen against a real router button press.
+This GUI layer was built and tested with FastAPI's `TestClient` (real
+request/response behavior for every route, not just import structure),
+but without a real rooted Android device available. The following still
+need verifying on-device:
+- Real `iw`/`wpa_supplicant`/`pixiewps` behavior behind the Scan, Queue,
+  and PBC routes.
 - Backgrounding/battery behavior during a long queue run.
 - A `kill -9` mid-bruteforce crash-safety check against the real
   `SessionStore` file.
