@@ -26,8 +26,10 @@ radio_lock, connection_factory, interface.
 """
 
 import threading
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 import src.wps.connection as connection
 from src.events import EventBus
@@ -39,6 +41,8 @@ from src.web import routes_queue
 from src.web import routes_scan
 from src.web.queue_runner import QueueRunner
 from src.wifi.scanner import WiFiScanner
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 def create_app(
@@ -69,5 +73,9 @@ def create_app(
     app.include_router(routes_scan.router)
     app.include_router(routes_events.router)
     app.include_router(routes_pbc.router)
+
+    # Mounted last: a catch-all for "/", so it never shadows the API
+    # routers registered above it.
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
     return app

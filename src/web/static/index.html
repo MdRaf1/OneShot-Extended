@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneShot-Extended</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>OneShot-Extended</h1>
+
+  <nav class="tabs">
+    <button class="tab-button" data-tab="scan">Scan</button>
+    <button class="tab-button" data-tab="queue">Queue</button>
+    <button class="tab-button" data-tab="log">Log</button>
+    <button class="tab-button" data-tab="pbc">PBC</button>
+  </nav>
+
+  <section id="tab-scan" class="tab-panel">
+    <h2>Scan</h2>
+    <button id="scan-button">Scan</button>
+    <button id="enqueue-button">Add selected to queue</button>
+    <ul id="scan-results"></ul>
+  </section>
+
+  <section id="tab-queue" class="tab-panel">
+    <h2>Queue</h2>
+    <button id="start-button">Start</button>
+    <button id="stop-button">Stop</button>
+    <ul id="queue-results"></ul>
+  </section>
+
+  <section id="tab-log" class="tab-panel">
+    <h2>Log</h2>
+    <pre id="log-output"></pre>
+  </section>
+
+  <section id="tab-pbc" class="tab-panel">
+    <h2>PBC</h2>
+    <form id="pbc-form">
+      <input type="text" id="pbc-bssid" placeholder="BSSID (optional)">
+      <button type="submit">Start PBC</button>
+    </form>
+    <p id="pbc-status"></p>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
